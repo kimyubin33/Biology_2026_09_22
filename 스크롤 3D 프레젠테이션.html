@@ -1,0 +1,481 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>스크롤 3D 프레젠테이션</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;600;700&display=swap">
+<style>
+/* Layout: fixed WebGL stage behind full-height slides; copy left, device right; on phones device on top, copy in a panel below */
+:root{
+  --bg:#0B0C0F;
+  --fg:#ECEDEF;
+  --muted:#9AA0AB;
+  --accent:#A9C3FF;
+  --line:#262A33;
+  --panel:rgba(14,15,20,.82);
+  --font-sans:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-size:16px;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+
+#stage{position:fixed;inset:0;z-index:0;pointer-events:none}
+#stage::before{content:"";position:absolute;inset:0;background:radial-gradient(60vmax 60vmax at var(--gx,72%) 50%, rgba(169,195,255,.10), transparent 60%)}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.nogl{position:fixed;left:50%;top:40%;transform:translateX(-50%);color:var(--muted);font-size:14px;text-align:center;max-width:320px}
+
+main{position:relative;z-index:1}
+.slide{min-height:100svh;display:flex;align-items:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:96px;box-sizing:border-box}
+.copy{width:min(540px,42vw);margin-left:6vw;display:flex;flex-direction:column;gap:20px;min-width:0}
+.eyebrow{font-family:var(--font-mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1,h2{margin:0;font-weight:700;letter-spacing:-.03em;text-wrap:balance}
+h1{font-size:clamp(40px,5.2vw,78px);line-height:1.08}
+h2{font-size:clamp(30px,3.6vw,54px);line-height:1.12}
+.copy p{margin:0;font-size:18px;line-height:1.75;color:var(--muted);font-weight:400}
+.copy p b{color:var(--fg);font-weight:600}
+
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.compare div{background:var(--bg);padding:18px 18px 20px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.compare h3{margin:0;font-size:16px;font-weight:600}
+.compare .tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:var(--accent)}
+.compare ul{margin:0;padding-left:18px;color:var(--muted);font-size:15px;line-height:1.7}
+
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.steps li{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line)}
+.steps .n{font-family:var(--font-mono);font-size:13px;color:var(--accent)}
+.steps .t{font-size:17px;font-weight:600}
+.steps .tool{font-family:var(--font-mono);font-size:12.5px;color:var(--muted);text-align:right}
+
+.answers{display:flex;flex-direction:column;gap:14px}
+.answer{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start}
+.pill{font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;margin-top:3px}
+.pill.no{background:#22303F;color:#B9D3F2}
+.pill.yes{background:#3A2C1C;color:#F2C99A}
+.pill.free{background:#1E3326;color:#A9E2BC}
+.answer p{font-size:16px!important;line-height:1.7!important}
+
+.swatches{display:flex;flex-wrap:wrap;gap:12px}
+.sw{display:flex;align-items:center;gap:10px;background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:999px;padding:6px 14px 6px 6px;font:inherit;font-size:14px;cursor:pointer;transition:border-color .2s,background .2s}
+.sw i{width:28px;height:28px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.sw:hover{border-color:var(--muted)}
+.sw[aria-pressed="true"]{border-color:var(--accent);background:rgba(169,195,255,.08)}
+.sw:focus-visible,.dots button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.keys{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:14px}
+kbd{font-family:var(--font-mono);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:2px 7px;color:var(--fg)}
+
+/* fixed chrome */
+.progress{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);height:2px;z-index:5;background:var(--line)}
+.progress span{display:block;height:100%;width:0;background:var(--accent)}
+.counter{position:fixed;z-index:5;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.counter b{color:var(--fg);font-weight:500}
+.dots{position:fixed;z-index:5;right:calc(20px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px}
+.dots button{width:10px;height:10px;border-radius:50%;border:1px solid var(--muted);background:transparent;padding:0;cursor:pointer;transition:background .2s,transform .2s}
+.dots button[aria-current="true"]{background:var(--accent);border-color:var(--accent);transform:scale(1.25)}
+
+@media (max-width:760px){
+  .slide{align-items:flex-end;padding-block:56vh 56px}
+  .slide:first-child{padding-top:52vh}
+  .copy{width:100%;margin-left:0;background:var(--panel);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:18px;padding:22px 20px;box-sizing:border-box}
+  .copy p{font-size:16px}
+  .dots{display:none}
+  .counter{bottom:auto;top:calc(14px + env(safe-area-inset-top,0px))}
+  .steps li{grid-template-columns:32px 1fr}
+  .steps .tool{grid-column:2;text-align:left}
+}
+@media (max-width:420px){ .compare{grid-template-columns:1fr} }
+</style>
+
+<div id="stage" aria-hidden="true"></div>
+<div class="progress"><span id="bar"></span></div>
+<div class="counter" id="counter"><b>01</b> / 09</div>
+<nav class="dots" id="dots" aria-label="슬라이드 이동"></nav>
+
+<main id="slides">
+  <section class="slide" data-title="시작">
+    <div class="copy">
+      <p class="eyebrow">HTML 프레젠테이션 · 예제</p>
+      <h1>스크롤하면 움직이는 3D 제품 페이지</h1>
+      <p>이 페이지 자체가 예제입니다. 아래로 스크롤하거나 방향키를 누르면 슬라이드가 넘어가고, 기기가 장면에 맞춰 회전하고 분해됩니다.</p>
+      <div class="keys"><kbd>↓</kbd><kbd>Space</kbd> 다음 <kbd>↑</kbd> 이전</div>
+    </div>
+  </section>
+
+  <section class="slide" data-title="애플의 비밀">
+    <div class="copy">
+      <p class="eyebrow">01 · 원리</p>
+      <h2>애플 페이지는 대부분 미리 렌더링한 영상입니다</h2>
+      <p>극사실적인 장면은 3D 툴에서 프레임 수백 장을 렌더링한 뒤, <b>스크롤 위치에 맞는 프레임을 canvas에 그리는 방식</b>이 중심입니다. 브라우저는 계산하지 않고 이미지를 넘기기만 합니다.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-title="두 가지 방식">
+    <div class="copy">
+      <p class="eyebrow">02 · 방식 비교</p>
+      <h2>이 페이지는 실시간 3D입니다</h2>
+      <div class="compare">
+        <div><span class="tag">IMAGE SEQUENCE</span><h3>이미지 시퀀스</h3><ul><li>퀄리티 최고</li><li>용량이 큼</li><li>조작은 스크롤뿐</li></ul></div>
+        <div><span class="tag">REAL-TIME WEBGL</span><h3>실시간 3D</h3><ul><li>가볍고 즉각 반응</li><li>색·각도 바로 변경</li><li>조명·재질 실력이 관건</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-title="분해 장면">
+    <div class="copy">
+      <p class="eyebrow">03 · 분해 연출</p>
+      <h2>분해 장면도 코드로 만듭니다</h2>
+      <p>기기를 <b>앞판, 프레임, 기판, 배터리, 뒷판, 카메라</b>로 나눠 두고 스크롤 진행도에 따라 각 부품을 앞뒤로 벌립니다. 애플의 분해 연출과 같은 원리입니다.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-title="색상 변경">
+    <div class="copy">
+      <p class="eyebrow">04 · 인터랙션</p>
+      <h2>색상은 그 자리에서 바뀝니다</h2>
+      <div class="swatches" role="group" aria-label="기기 색상">
+        <button class="sw" id="sw-silver" data-color="#C4C8CE" aria-pressed="true"><i style="background:#C4C8CE"></i>실버</button>
+        <button class="sw" id="sw-graphite" data-color="#3B3E44" aria-pressed="false"><i style="background:#3B3E44"></i>그라파이트</button>
+        <button class="sw" id="sw-sand" data-color="#B9A588" aria-pressed="false"><i style="background:#B9A588"></i>샌드</button>
+        <button class="sw" id="sw-navy" data-color="#2E3D58" aria-pressed="false"><i style="background:#2E3D58"></i>딥 네이비</button>
+      </div>
+      <p>실시간 3D의 가장 큰 장점입니다. 이미지 시퀀스였다면 <b>색상마다 프레임을 전부 다시 렌더링</b>해야 합니다.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-title="제작 흐름">
+    <div class="copy">
+      <p class="eyebrow">05 · 고퀄 시퀀스 제작</p>
+      <h2>최고 퀄리티를 원할 때의 흐름</h2>
+      <ol class="steps">
+        <li><span class="n">01</span><span class="t">모델링</span><span class="tool">Blender · CAD</span></li>
+        <li><span class="n">02</span><span class="t">프레임 렌더링</span><span class="tool">Cycles · Redshift</span></li>
+        <li><span class="n">03</span><span class="t">이미지 압축</span><span class="tool">WebP · AVIF</span></li>
+        <li><span class="n">04</span><span class="t">스크롤 재생</span><span class="tool">GSAP + canvas</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="slide" data-title="Blender">
+    <div class="copy">
+      <p class="eyebrow">06 · 자주 묻는 질문</p>
+      <h2>Blender는 받아야 할까?</h2>
+      <div class="answers">
+        <div class="answer"><span class="pill no">지금은 불필요</span><p>이 페이지의 기기는 코드로 직접 만든 모델입니다. 연습 단계에서는 없어도 됩니다.</p></div>
+        <div class="answer"><span class="pill yes">실전엔 필요</span><p>실제 제품을 정교하게 보여주려면 모델링, 재질, 조명, 프레임 렌더링을 Blender에서 합니다.</p></div>
+        <div class="answer"><span class="pill free">무료</span><p>blender.org에서 받는 오픈소스입니다. GPU가 있으면 렌더링이 훨씬 빨라집니다.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" data-title="구성 요소">
+    <div class="copy">
+      <p class="eyebrow">07 · 이 페이지의 구조</p>
+      <h2>이 페이지에 쓴 것</h2>
+      <ol class="steps">
+        <li><span class="n">3D</span><span class="t">Three.js 장면</span><span class="tool">조명 · 반사</span></li>
+        <li><span class="n">KEY</span><span class="t">슬라이드별 자세</span><span class="tool">각도 · 위치 · 분해</span></li>
+        <li><span class="n">MIX</span><span class="t">스크롤로 보간</span><span class="tool">smoothstep</span></li>
+        <li><span class="n">ENV</span><span class="t">가상 스튜디오 반사</span><span class="tool">PMREM</span></li>
+      </ol>
+      <p>Blender에서 만든 glTF 모델을 불러와 같은 자리에 넣으면 구조는 그대로 쓸 수 있습니다.</p>
+    </div>
+  </section>
+
+  <section class="slide" data-title="마무리">
+    <div class="copy">
+      <p class="eyebrow">08 · 다음 단계</p>
+      <h2>다음은 직접 만들어 볼 차례</h2>
+      <p>슬라이드 내용만 바꾸면 발표용 덱이 되고, 기기 모델만 바꾸면 내 제품 소개 페이지가 됩니다. 창업 아이템이나 실험 장비를 이렇게 보여줄 수도 있습니다.</p>
+      <div class="keys"><kbd>Home</kbd> 처음으로</div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sections = Array.from(document.querySelectorAll('.slide'));
+  const N = sections.length;
+  const bar = document.getElementById('bar');
+  const counter = document.getElementById('counter');
+  const dotsNav = document.getElementById('dots');
+
+  // ---------- navigation chrome ----------
+  sections.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.setAttribute('aria-label',(i+1)+'번 슬라이드: '+s.dataset.title);
+    b.addEventListener('click',()=>go(i));
+    dotsNav.appendChild(b);
+  });
+  const dots = Array.from(dotsNav.children);
+  let tops=[];
+  function measure(){ tops = sections.map(s=>s.offsetTop); }
+  function progress(){
+    const y = window.scrollY;
+    if (y <= tops[0]) return 0;
+    for (let i=0;i<N-1;i++){
+      if (y < tops[i+1]) return i + (y - tops[i])/(tops[i+1]-tops[i]);
+    }
+    return N-1;
+  }
+  function go(i){
+    i = Math.max(0, Math.min(N-1, i));
+    sections[i].scrollIntoView({behavior: reduce ? 'auto' : 'smooth'});
+  }
+  addEventListener('keydown', e=>{
+    if (e.target.closest && e.target.closest('button') && (e.key===' '||e.key==='Enter')) return;
+    const cur = Math.round(progress());
+    if (['ArrowDown','ArrowRight','PageDown',' '].includes(e.key)){ e.preventDefault(); go(cur+1); }
+    else if (['ArrowUp','ArrowLeft','PageUp'].includes(e.key)){ e.preventDefault(); go(cur-1); }
+    else if (e.key==='Home'){ e.preventDefault(); go(0); }
+    else if (e.key==='End'){ e.preventDefault(); go(N-1); }
+  });
+  let lastIdx=-1;
+  function updateChrome(f){
+    bar.style.width = (f/(N-1)*100).toFixed(2)+'%';
+    const idx = Math.round(f);
+    if (idx!==lastIdx){
+      lastIdx=idx;
+      counter.innerHTML = '<b>'+String(idx+1).padStart(2,'0')+'</b> / '+String(N).padStart(2,'0');
+      dots.forEach((d,i)=>d.setAttribute('aria-current', i===idx ? 'true':'false'));
+    }
+  }
+
+  // ---------- color swatches ----------
+  const swatches = Array.from(document.querySelectorAll('.sw'));
+  let bodyHex = '#C4C8CE';
+  swatches.forEach(b=>b.addEventListener('click',()=>{
+    swatches.forEach(x=>x.setAttribute('aria-pressed', x===b ? 'true':'false'));
+    bodyHex = b.dataset.color;
+  }));
+
+  measure();
+  addEventListener('resize', measure);
+  addEventListener('load', measure);
+
+  const stage = document.getElementById('stage');
+  if (!window.THREE){
+    stage.insertAdjacentHTML('beforeend','<p class="nogl">3D 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.</p>');
+    addEventListener('scroll',()=>updateChrome(progress()),{passive:true});
+    updateChrome(0);
+    return;
+  }
+
+  // ---------- renderer ----------
+  let renderer;
+  try{
+    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  }catch(err){
+    stage.insertAdjacentHTML('beforeend','<p class="nogl">이 브라우저에서는 WebGL을 쓸 수 없어 3D 기기를 표시하지 못했습니다.</p>');
+    addEventListener('scroll',()=>updateChrome(progress()),{passive:true});
+    updateChrome(0);
+    return;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+  camera.position.set(0,0,6);
+
+  // virtual studio for reflections: dark room with soft-box panels
+  (function(){
+    const env = new THREE.Scene();
+    const room = new THREE.Mesh(new THREE.BoxGeometry(20,20,20), new THREE.MeshBasicMaterial({color:0x0c0d10, side:THREE.BackSide}));
+    env.add(room);
+    function panel(w,h,x,y,z,ry,rx,k){
+      const m = new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
+      m.color.setRGB(k,k,k*1.04);
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(w,h), m);
+      p.position.set(x,y,z); p.rotation.set(rx||0, ry||0, 0);
+      env.add(p);
+    }
+    panel(6,2.2, -5,3,3, Math.PI/2.6, -0.4, 5);
+    panel(1.2,9, 6,0,1, -Math.PI/2, 0, 4);
+    panel(1.2,9, -6,0,-2, Math.PI/2, 0, 2.2);
+    panel(8,1.4, 0,6,0, 0, Math.PI/2, 3);
+    panel(4,1, 2,-4,5, 0, -Math.PI/3, 1.4);
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromScene(env, 0.04).texture;
+    pm.dispose();
+  })();
+  const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(3,4,5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xa9c3ff, 0.9); rim.position.set(-4,1,-4); scene.add(rim);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.08));
+
+  // ---------- model built in code ----------
+  const W=0.78, H=1.6, D=0.07, R=0.12;
+  function rr(w,h,r){
+    const s=new THREE.Shape(), x=-w/2, y=-h/2;
+    s.moveTo(x+r,y); s.lineTo(x+w-r,y); s.quadraticCurveTo(x+w,y,x+w,y+r);
+    s.lineTo(x+w,y+h-r); s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    s.lineTo(x+r,y+h); s.quadraticCurveTo(x,y+h,x,y+h-r);
+    s.lineTo(x,y+r); s.quadraticCurveTo(x,y,x+r,y);
+    return s;
+  }
+  function flatUV(geo,w,h){
+    const p=geo.attributes.position, uv=geo.attributes.uv;
+    for(let i=0;i<p.count;i++) uv.setXY(i,(p.getX(i)+w/2)/w,(p.getY(i)+h/2)/h);
+    uv.needsUpdate=true; return geo;
+  }
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+
+  const phone = new THREE.Group(); scene.add(phone);
+
+  // frame (open band so internals show when exploded)
+  const frameMat = new THREE.MeshStandardMaterial({color:lin(bodyHex), metalness:1, roughness:0.26});
+  const ring = rr(W,H,R); ring.holes.push(rr(W-0.07,H-0.07,R-0.035));
+  const frameGeo = new THREE.ExtrudeGeometry(ring,{depth:D, bevelEnabled:true, bevelThickness:0.012, bevelSize:0.012, bevelSegments:5, curveSegments:28});
+  frameGeo.translate(0,0,-D/2);
+  const frame = new THREE.Group(); phone.add(frame);
+  frame.add(new THREE.Mesh(frameGeo, frameMat));
+  const btnGeo = new THREE.BoxGeometry(0.014,0.15,0.032);
+  [[ -1, 0.42],[ -1, 0.22],[ -1, 0.56],[ 1, 0.3]].forEach(([side,y],i)=>{
+    const b=new THREE.Mesh(i===2? new THREE.BoxGeometry(0.014,0.07,0.032):btnGeo, frameMat);
+    b.position.set(side*(W/2+0.017), y, 0); frame.add(b);
+  });
+
+  // front: glass + screen + island
+  const front = new THREE.Group(); phone.add(front);
+  const fz = D/2+0.013;
+  const glassMat = new THREE.MeshPhysicalMaterial({color:0x050507, roughness:0.06, metalness:0, clearcoat:1, clearcoatRoughness:0.03});
+  const fg = new THREE.Mesh(new THREE.ShapeGeometry(rr(W-0.004,H-0.004,R-0.002),24), glassMat);
+  fg.position.z=fz; front.add(fg);
+  const sc = document.createElement('canvas'); sc.width=512; sc.height=1050;
+  const g = sc.getContext('2d');
+  const grad = g.createLinearGradient(0,0,512,1050);
+  grad.addColorStop(0,'#F2B26B'); grad.addColorStop(0.45,'#C1544A'); grad.addColorStop(1,'#1B3B4A');
+  g.fillStyle=grad; g.fillRect(0,0,512,1050);
+  const rg = g.createRadialGradient(380,300,10,380,300,420);
+  rg.addColorStop(0,'rgba(255,240,210,.55)'); rg.addColorStop(1,'rgba(255,240,210,0)');
+  g.fillStyle=rg; g.fillRect(0,0,512,1050);
+  g.fillStyle='rgba(255,255,255,.92)'; g.textAlign='center';
+  g.font='300 30px sans-serif'; g.fillText('10월 16일 금요일',256,190);
+  g.font='600 150px sans-serif'; g.fillText('9:41',256,340);
+  g.fillStyle='rgba(255,255,255,.18)';
+  [[60,880],[180,880],[300,880],[420,880]].forEach(([x,y])=>{ g.beginPath(); g.arc(x+30,y,34,0,Math.PI*2); g.fill(); });
+  const tex = new THREE.CanvasTexture(sc); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 4;
+  const sw = W-0.075, sh = H-0.075;
+  const screen = new THREE.Mesh(flatUV(new THREE.ShapeGeometry(rr(sw,sh,R-0.04),24),sw,sh), new THREE.MeshBasicMaterial({map:tex, toneMapped:false}));
+  screen.position.z=fz+0.001; front.add(screen);
+  const island = new THREE.Mesh(new THREE.ShapeGeometry(rr(0.2,0.055,0.0275),12), new THREE.MeshBasicMaterial({color:0x020203}));
+  island.position.set(0,H/2-0.1,fz+0.002); front.add(island);
+
+  // internals
+  const inner = new THREE.Group(); phone.add(inner);
+  const battery = new THREE.Mesh(new THREE.BoxGeometry(0.58,0.9,0.03), new THREE.MeshStandardMaterial({color:0x2a2c31, metalness:0.4, roughness:0.55}));
+  battery.position.set(0,-0.25,-0.005); inner.add(battery);
+  const board = new THREE.Group(); inner.add(board);
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.64,0.48,0.012), new THREE.MeshStandardMaterial({color:0x15241f, metalness:0.2, roughness:0.6}));
+  board.add(pcb);
+  const chipMat = new THREE.MeshStandardMaterial({color:0xb8bcc4, metalness:1, roughness:0.3});
+  [[-0.14,0.08,0.2,0.16],[0.12,0.1,0.14,0.12],[0.14,-0.1,0.12,0.1],[-0.12,-0.13,0.18,0.08]].forEach(([x,y,w,h])=>{
+    const c=new THREE.Mesh(new THREE.BoxGeometry(w,h,0.01), chipMat); c.position.set(x,y,0.011); board.add(c);
+  });
+  board.position.set(0,0.47,0.008);
+
+  // back glass + camera
+  const back = new THREE.Group(); phone.add(back);
+  const backMat = new THREE.MeshPhysicalMaterial({color:lin(bodyHex), roughness:0.42, metalness:0.05, clearcoat:0.7, clearcoatRoughness:0.25});
+  const bg = new THREE.Mesh(new THREE.ShapeGeometry(rr(W-0.004,H-0.004,R-0.002),24), backMat);
+  bg.rotation.y=Math.PI; bg.position.z=-fz; back.add(bg);
+
+  const cam = new THREE.Group(); phone.add(cam);
+  const modGeo = new THREE.ExtrudeGeometry(rr(0.34,0.34,0.08),{depth:0.012,bevelEnabled:true,bevelThickness:0.008,bevelSize:0.008,bevelSegments:4,curveSegments:16});
+  modGeo.translate(0,0,-0.02);
+  const mod = new THREE.Mesh(modGeo, backMat);
+  const mx = W/2-0.06-0.17, my = H/2-0.06-0.17;
+  mod.position.set(mx,my,-fz); cam.add(mod);
+  const ringMat = new THREE.MeshStandardMaterial({color:0x9a9ea6, metalness:1, roughness:0.2});
+  const lensMat = new THREE.MeshPhysicalMaterial({color:0x07080c, roughness:0.02, clearcoat:1, clearcoatRoughness:0, metalness:0.2});
+  const ringGeo = new THREE.CylinderGeometry(0.062,0.066,0.03,40); ringGeo.rotateX(Math.PI/2);
+  const lensGeo = new THREE.CircleGeometry(0.046,40);
+  [[0.075,0.075],[0.075,-0.075],[-0.07,0]].forEach(([dx,dy])=>{
+    const r=new THREE.Mesh(ringGeo,ringMat); r.position.set(mx+dx,my+dy,-fz-0.035); cam.add(r);
+    const l=new THREE.Mesh(lensGeo,lensMat); l.rotation.y=Math.PI; l.position.set(mx+dx,my+dy,-fz-0.0505); cam.add(l);
+  });
+  const flash = new THREE.Mesh(new THREE.CircleGeometry(0.02,20), new THREE.MeshBasicMaterial({color:0xe9dcc0}));
+  flash.rotation.y=Math.PI; flash.position.set(mx-0.07,my+0.1,-fz-0.021); cam.add(flash);
+
+  // ---------- keyframes: one pose per slide ----------
+  // ry/rx in degrees, x/y offsets in world units, s scale, e explode 0..1
+  const K = [
+    {ry:-24, rx:6,  x:0,    y:0,     s:1.00, e:0},
+    {ry:205, rx:10, x:0,    y:0,     s:1.05, e:0},
+    {ry:290, rx:-8, x:0,    y:0,     s:1.00, e:0},
+    {ry:395, rx:18, x:-0.1, y:0,     s:0.92, e:1},
+    {ry:520, rx:6,  x:0,    y:0,     s:1.02, e:0},
+    {ry:700, rx:14, x:0.05, y:0,     s:0.88, e:0},
+    {ry:792, rx:2,  x:0,    y:0,     s:1.00, e:0},
+    {ry:1055,rx:20, x:0,    y:0.05,  s:0.95, e:0.4},
+    {ry:1080,rx:0,  x:0,    y:0,     s:1.05, e:0}
+  ];
+  const ease = t => t*t*(3-2*t);
+  function pose(f){
+    const i=Math.min(Math.floor(f),K.length-2), t=ease(Math.min(1,Math.max(0,f-i)));
+    const a=K[i], b=K[i+1], o={};
+    for (const k in a) o[k]=a[k]+(b[k]-a[k])*t;
+    return o;
+  }
+
+  let base={x:0,y:0,s:1};
+  function resize(){
+    const w=innerWidth, h=innerHeight;
+    renderer.setSize(w,h,false);
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+    const visH = 2*camera.position.z*Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+    const visW = visH*camera.aspect;
+    if (w<=760){
+      base={x:0, y:visH*0.2, s:Math.min(0.9, visW/2.2)};
+      stage.style.setProperty('--gx','50%');
+    } else {
+      base={x:visW*0.2, y:0, s:1};
+      stage.style.setProperty('--gx','70%');
+    }
+  }
+  resize(); addEventListener('resize',resize);
+
+  const cur = Object.assign({}, pose(0));
+  const tgtColor = new THREE.Color(), white = new THREE.Color(1,1,1);
+  let last = performance.now();
+  function frameLoop(now){
+    requestAnimationFrame(frameLoop);
+    if (document.hidden) return;
+    const dt = Math.min(0.05,(now-last)/1000); last=now;
+    const f = progress();
+    updateChrome(f);
+    const p = pose(f);
+    const k = reduce ? 1 : 1-Math.exp(-dt*6);
+    for (const key in p) cur[key]+= (p[key]-cur[key])*k;
+
+    const float = reduce ? 0 : Math.sin(now/1400)*0.03;
+    phone.rotation.set(THREE.MathUtils.degToRad(cur.rx), THREE.MathUtils.degToRad(cur.ry), 0);
+    phone.position.set(base.x+cur.x, base.y+cur.y+float, 0);
+    phone.scale.setScalar(base.s*cur.s);
+
+    const e = cur.e;
+    front.position.z = e*0.55;
+    board.position.z = 0.008 + e*0.24;
+    battery.position.z = -0.005 - e*0.05;
+    back.position.z = -e*0.36;
+    cam.position.z = -e*0.62;
+
+    tgtColor.copy(lin(bodyHex));
+    const ck = reduce ? 1 : 1-Math.exp(-dt*5);
+    frameMat.color.lerp(tgtColor, ck);
+    backMat.color.lerp(tgtColor.clone().lerp(white,0.12), ck);
+
+    renderer.render(scene,camera);
+  }
+  requestAnimationFrame(frameLoop);
+})();
+</script>
+
+</body></html>
